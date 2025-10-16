@@ -1,0 +1,44 @@
+version: "3.8"
+
+x-web-base: &web_base
+  build: ./app
+  env_file: [.env]
+  environment:
+    DATABASE_DSN: ${DATABASE_DSN}
+    PORT: ${PORT:-8000}
+  depends_on:
+    pg:
+      condition: service_healthy
+  networks: [appnet]
+  restart: on-failure:3
+
+services:
+  # prod-like: no host port exposure
+  web:
+    <<: *web_base
+    profiles: ["prod"]
+
+  # dev: publishes host port
+  web_dev:
+    <<: *web_base
+    profiles: ["dev"]
+    ports: ["8000:8000"]
+
+  pg:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: appdb
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    networks: [appnet]
+    profiles: ["dev","prod"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-appdb} -h 127.0.0.1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+
+networks: { appnet: {} }
+volumes:  { pgdata:  {} }
